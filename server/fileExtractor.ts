@@ -3,9 +3,11 @@ import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const pdfParse: (buffer: Buffer) => Promise<{ text: string }> = require("pdf-parse");
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { parseOffice } = require("officeparser") as { parseOffice: (input: Buffer | string, callback: (data: string, err: unknown) => void, config?: object) => void };
+
+// استخدام pdf2json بدلاً من pdf-parse
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const PDFParser: any = require("pdf2json");
 
 export type SupportedFileType = "pdf" | "docx" | "doc" | "pptx" | "ppt";
 
@@ -19,11 +21,38 @@ export function detectFileType(filename: string, mimetype: string): SupportedFil
   return null;
 }
 
+async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    try {
+      const parser = new PDFParser(null, 1);
+      let text = "";
+
+      parser.on("pdfParser_dataError", (error: unknown) => {
+        reject(new Error(`PDF parsing error: ${String(error)}`));
+      });
+
+      parser.on("pdfParser_dataReady", () => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const data = parser.getRawTextContent() as any;
+          text = data || "";
+          resolve(text.trim());
+        } catch (err) {
+          reject(new Error(`Failed to extract text from PDF: ${String(err)}`));
+        }
+      });
+
+      parser.parseBuffer(buffer);
+    } catch (error) {
+      reject(new Error(`Failed to extract text from PDF: ${String(error)}`));
+    }
+  });
+}
+
 export async function extractTextFromBuffer(buffer: Buffer, fileType: SupportedFileType): Promise<string> {
   try {
     if (fileType === "pdf") {
-      const data = await pdfParse(buffer);
-      return data.text.trim();
+      return await extractTextFromPDF(buffer);
     }
 
     if (fileType === "docx" || fileType === "doc") {
