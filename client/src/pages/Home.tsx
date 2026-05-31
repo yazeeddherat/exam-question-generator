@@ -192,6 +192,29 @@ export default function Home() {
     setDifficulty("medium");
   };
 
+  // حساب الوقت المتوقع بناءً على عدد الأسئلة ومستوى الصعوبة
+  const getEstimatedTime = () => {
+    const timePerQuestion = {
+      easy: 1.5,
+      medium: 2.5,
+      hard: 4,
+    };
+    const baseTime = 8;
+    const totalSeconds = baseTime + (questionCount * timePerQuestion[difficulty]);
+    return Math.ceil(totalSeconds);
+  };
+
+  const [timeLeft, setTimeLeft] = useState(getEstimatedTime());
+
+  useEffect(() => {
+    if (appState !== "loading") return;
+    setTimeLeft(getEstimatedTime());
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [appState, questionCount, difficulty]);
+
   const score = getScore();
   const percentage = questions.length > 0 ? Math.round((score / questions.length) * 100) : 0;
   const fileExt = selectedFile?.name.toLowerCase().split(".").pop() as keyof typeof FILE_TYPES | undefined;
@@ -419,6 +442,10 @@ export default function Home() {
 
   // ─── LOADING STATE ─────────────────────────────────────────────────────────
   if (appState === "loading") {
+    const minutes = Math.floor(timeLeft / 60);
+    const seconds = timeLeft % 60;
+    const difficultyLabel = difficulty === "easy" ? "سهل" : difficulty === "medium" ? "متوسط" : "صعب";
+
     return (
       <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: "linear-gradient(160deg, oklch(0.97 0.005 250) 0%, oklch(0.93 0.015 75) 100%)" }}>
         <div className="luxury-card rounded-2xl p-12 text-center max-w-md mx-4">
@@ -429,9 +456,18 @@ export default function Home() {
             </div>
           </div>
           <h3 className="text-2xl font-extrabold mb-2" style={{ color: "oklch(0.22 0.08 260)" }}>جارٍ التحليل والتوليد</h3>
-          <p className="mb-6" style={{ color: "oklch(0.50 0.03 250)" }}>
-            يقوم الذكاء الاصطناعي بتحليل محتوى ملفك وتوليد {questionCount} سؤال...
+          <p className="mb-4" style={{ color: "oklch(0.50 0.03 250)" }}>
+            يقوم الذكاء الاصطناعي بتحليل محتوى ملفك وتوليد {questionCount} سؤال ({difficultyLabel})...
           </p>
+          
+          {/* Timer */}
+          <div className="mb-6 p-4 rounded-xl" style={{ background: "oklch(0.72 0.15 75 / 0.1)", border: "1px solid oklch(0.72 0.15 75 / 0.3)" }}>
+            <p className="text-xs mb-2" style={{ color: "oklch(0.50 0.03 250)" }}>الوقت المتوقع المتبقي</p>
+            <div className="text-3xl font-bold" style={{ color: "oklch(0.72 0.15 75)" }}>
+              {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+            </div>
+          </div>
+
           <div className="space-y-3">
             {["استخراج النص من الملف", "تحليل المحتوى بالذكاء الاصطناعي", "توليد الأسئلة والخيارات"].map((step, i) => (
               <div key={step} className="flex items-center gap-3 text-sm p-3 rounded-lg" style={{ background: "oklch(0.95 0.01 75)" }}>
