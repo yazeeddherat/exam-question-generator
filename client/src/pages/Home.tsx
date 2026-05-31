@@ -15,7 +15,7 @@ import {
   Printer,
   RotateCcw,
   BookOpen,
-  Sparkles,
+
   Info,
 } from "lucide-react";
 
@@ -205,23 +205,16 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-white font-bold text-lg leading-tight">مولّد أسئلة الامتحان</h1>
-                <p className="text-xs" style={{ color: "oklch(0.72 0.15 75)" }}>بالذكاء الاصطناعي</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium" style={{ background: "oklch(0.72 0.15 75 / 0.15)", color: "oklch(0.85 0.10 75)" }}>
-              <Sparkles className="w-3.5 h-3.5" />
-              مدعوم بالذكاء الاصطناعي
-            </div>
+
           </div>
         </header>
 
         <main className="container py-12">
           {/* Hero */}
           <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium mb-6" style={{ background: "oklch(0.72 0.15 75 / 0.12)", color: "oklch(0.55 0.15 65)", border: "1px solid oklch(0.72 0.15 75 / 0.3)" }}>
-              <Sparkles className="w-4 h-4" />
-              توليد أسئلة ذكية من ملفاتك
-            </div>
+
             <h2 className="text-4xl md:text-5xl font-extrabold mb-4 leading-tight">
               <span className="shimmer-text">أنشئ اختباراتك</span>
               <br />
@@ -353,8 +346,7 @@ export default function Home() {
                 onClick={handleGenerate}
               >
                 <span className="flex items-center justify-center gap-2">
-                  <Sparkles className="w-5 h-5" />
-                  توليد {questionCount} سؤال بالذكاء الاصطناعي
+                  توليد {questionCount} سؤال
                 </span>
               </button>
 
@@ -362,7 +354,7 @@ export default function Home() {
               <div className="flex items-start gap-2 mt-4 p-3 rounded-lg" style={{ background: "oklch(0.72 0.15 75 / 0.08)" }}>
                 <Info className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "oklch(0.65 0.18 65)" }} />
                 <p className="text-xs" style={{ color: "oklch(0.50 0.03 250)" }}>
-                  تُولَّد الأسئلة من محتوى ملفك فقط ولا تُستخدم أي مصادر خارجية.
+                  الأسئلة تُولَّد من محتوى ملفك فقط.
                 </p>
               </div>
             </div>
