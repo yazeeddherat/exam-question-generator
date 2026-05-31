@@ -26,3 +26,35 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // TODO: Add your tables here
+
+export const examSessions = mysqlTable("exam_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId"),
+  fileName: varchar("fileName", { length: 512 }).notNull(),
+  fileType: varchar("fileType", { length: 32 }).notNull(),
+  fileKey: varchar("fileKey", { length: 512 }),
+  questionCount: int("questionCount").notNull().default(10),
+  status: mysqlEnum("status", ["pending", "processing", "ready", "error"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ExamSession = typeof examSessions.$inferSelect;
+export type InsertExamSession = typeof examSessions.$inferInsert;
+
+export const questions = mysqlTable("questions", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  questionText: text("questionText").notNull(),
+  optionA: text("optionA").notNull(),
+  optionB: text("optionB").notNull(),
+  optionC: text("optionC").notNull(),
+  optionD: text("optionD").notNull(),
+  correctAnswer: mysqlEnum("correctAnswer", ["A", "B", "C", "D"]).notNull(),
+  explanation: text("explanation"),
+  orderIndex: int("orderIndex").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Question = typeof questions.$inferSelect;
+export type InsertQuestion = typeof questions.$inferInsert;
