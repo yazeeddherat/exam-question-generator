@@ -259,13 +259,16 @@ export default function Home() {
                         {(selectedFile.size / 1024 / 1024).toFixed(2)} ميغابايت
                       </p>
                     </div>
-                    <button
-                      className="text-sm underline"
+                    <div
+                      className="text-sm underline cursor-pointer"
                       style={{ color: "oklch(0.55 0.15 65)" }}
                       onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedFile(null); } }}
                     >
                       تغيير الملف
-                    </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-4">
