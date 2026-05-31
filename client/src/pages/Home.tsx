@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 type AppState = "upload" | "loading" | "quiz" | "results";
+type Language = "ar" | "en";
 
 interface QuestionData {
   id: number;
@@ -49,6 +50,7 @@ export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [questionCount, setQuestionCount] = useState(10);
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const [language, setLanguage] = useState<Language>("en");
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [questions, setQuestions] = useState<QuestionData[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -136,15 +138,18 @@ export default function Home() {
           fileBase64: base64,
           questionCount,
           difficulty,
+          language,
         });
       };
       reader.onerror = () => {
-        toast.error("خطأ في قراءة الملف. يرجى المحاولة مرة أخرى.");
+        const errorMsg = language === "ar" ? "خطأ في قراءة الملف. يرجى المحاولة مرة أخرى." : "Error reading file. Please try again.";
+        toast.error(errorMsg);
         setAppState("upload");
       };
       reader.readAsDataURL(selectedFile);
     } catch (error) {
-      toast.error("حدث خطأ أثناء معالجة الملف.");
+      const errorMsg = language === "ar" ? "حدث خطأ أثناء معالجة الملف." : "Error processing file.";
+      toast.error(errorMsg);
       setAppState("upload");
     }
   };
@@ -333,6 +338,36 @@ export default function Home() {
                         <div className="text-2xl mb-1">{level === "easy" ? "🟢" : level === "medium" ? "🟡" : "🔴"}</div>
                         <div className="text-sm font-bold">{info.label}</div>
                         <div className="text-xs mt-1" style={{ color: "oklch(0.55 0.03 250)" }}>{info.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Language Selection */}
+              <div className="mb-8">
+                <label className="font-semibold block mb-4" style={{ color: "oklch(0.22 0.08 260)" }}>لغة الأسئلة</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["ar", "en"] as const).map((lang) => {
+                    const labels = {
+                      ar: { label: "العربية", flag: "🇸🇦" },
+                      en: { label: "English", flag: "🇬🇧" },
+                    };
+                    const info = labels[lang];
+                    return (
+                      <button
+                        key={lang}
+                        onClick={() => setLanguage(lang)}
+                        className="p-4 rounded-xl text-center transition-all border-2 font-semibold"
+                        style={{
+                          background: language === lang ? "oklch(0.72 0.15 75 / 0.15)" : "white",
+                          borderColor: language === lang ? "oklch(0.72 0.15 75)" : "oklch(0.88 0.01 250)",
+                          color: language === lang ? "oklch(0.72 0.15 75)" : "oklch(0.35 0.05 250)",
+                          boxShadow: language === lang ? "0 0 0 3px oklch(0.72 0.15 75 / 0.25)" : "none",
+                        }}
+                      >
+                        <div className="text-2xl mb-1">{info.flag}</div>
+                        <div className="text-sm font-bold">{info.label}</div>
                       </button>
                     );
                   })}

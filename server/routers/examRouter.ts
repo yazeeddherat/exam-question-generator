@@ -24,7 +24,8 @@ type DifficultyLevel = "easy" | "medium" | "hard";
 async function generateQuestionsFromText(
   text: string,
   count: number,
-  difficulty: DifficultyLevel = "medium"
+  difficulty: DifficultyLevel = "medium",
+  language: "ar" | "en" = "en"
 ): Promise<GeneratedQuestion[]> {
   const truncatedText = text.slice(0, 12000);
 
@@ -33,6 +34,10 @@ async function generateQuestionsFromText(
     medium: "Questions should be of medium difficulty and test understanding and application. Use information from the text with some analysis.",
     hard: "Questions should be difficult and test deep analysis and connections between concepts. Use detailed and complex information from the text.",
   };
+
+  const languageInstruction = language === "ar" 
+    ? "IMPORTANT: Generate ALL questions, options, and explanations ONLY in Arabic. No other language is allowed."
+    : "IMPORTANT: Generate ALL questions, options, and explanations ONLY in English. No other language is allowed.";
 
   const systemPrompt = `You are an educational assistant specialized in creating multiple-choice exam questions.
 Your task: Create accurate and diverse exam questions based solely on the provided text.
@@ -45,9 +50,9 @@ Strict rules:
 - Ensure correct answers are randomly distributed across options A, B, C, and D
 - Make incorrect options plausible and not obviously wrong
 - Questions should test real understanding, not surface memorization
-- IMPORTANT: Generate ALL questions, options, and explanations ONLY in English. No other language is allowed.`
+- ${languageInstruction}`
 
-  const userPrompt = `Based solely on the following text, create ${count} multiple-choice questions. IMPORTANT: All questions, options, and explanations must be in English only.
+  const userPrompt = `Based solely on the following text, create ${count} multiple-choice questions. ${languageInstruction}
 
 Text:
 """
@@ -134,10 +139,11 @@ export const examRouter = router({
         fileBase64: z.string().min(1),
         questionCount: z.number().int().min(3).max(30).default(10),
         difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
+        language: z.enum(["ar", "en"]).default("en"),
       })
     )
     .mutation(async ({ input }) => {
-      const { fileName, fileType: mimeType, fileBase64, questionCount, difficulty } = input;
+      const { fileName, fileType: mimeType, fileBase64, questionCount, difficulty, language } = input;
 
       // Detect file type
       const fileType = detectFileType(fileName, mimeType);
@@ -185,7 +191,7 @@ export const examRouter = router({
         }
 
         // Generate questions with AI
-        const generatedQuestions = await generateQuestionsFromText(cleanText, questionCount, difficulty);
+        const generatedQuestions = await generateQuestionsFromText(cleanText, questionCount, difficulty, language);
 
         if (generatedQuestions.length === 0) {
           throw new TRPCError({
