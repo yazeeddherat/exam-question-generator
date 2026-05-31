@@ -97,8 +97,8 @@ export default function Home() {
       toast.error("نوع الملف غير مدعوم. يرجى رفع PDF أو Word أو PowerPoint.");
       return;
     }
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error("حجم الملف يتجاوز 20 ميغابايت.");
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("حجم الملف يتجاوز 10 ميغابايت.");
       return;
     }
     setSelectedFile(file);
@@ -118,18 +118,35 @@ export default function Home() {
     if (!selectedFile) return;
     setAppState("loading");
 
-    const buffer = await selectedFile.arrayBuffer();
-    const base64 = btoa(
-      new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
-    );
-
-    generateMutation.mutate({
-      fileName: selectedFile.name,
-      fileType: selectedFile.type || "application/octet-stream",
-      fileBase64: base64,
-      questionCount,
-      difficulty,
-    });
+    try {
+      // استخدام FileReader لتحويل الملف بشكل آمن
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        // استخراج base64 من data URL (بعد "base64,")
+        const base64 = dataUrl.split(",")[1] || "";
+        if (!base64) {
+          toast.error("فشل قراءة الملف. يرجى المحاولة مرة أخرى.");
+          setAppState("upload");
+          return;
+        }
+        generateMutation.mutate({
+          fileName: selectedFile.name,
+          fileType: selectedFile.type || "application/octet-stream",
+          fileBase64: base64,
+          questionCount,
+          difficulty,
+        });
+      };
+      reader.onerror = () => {
+        toast.error("خطأ في قراءة الملف. يرجى المحاولة مرة أخرى.");
+        setAppState("upload");
+      };
+      reader.readAsDataURL(selectedFile);
+    } catch (error) {
+      toast.error("حدث خطأ أثناء معالجة الملف.");
+      setAppState("upload");
+    }
   };
 
   const handleAnswer = (questionId: number, answer: string) => {

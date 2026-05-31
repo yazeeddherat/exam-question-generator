@@ -150,11 +150,11 @@ export const examRouter = router({
       // Decode base64 to buffer
       const buffer = Buffer.from(fileBase64, "base64");
 
-      // Check file size (max 20MB)
-      if (buffer.length > 20 * 1024 * 1024) {
+      // Check file size (max 10MB)
+      if (buffer.length > 10 * 1024 * 1024) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "حجم الملف يتجاوز الحد المسموح (20 ميغابايت).",
+          message: "حجم الملف يتجاوز الحد المسموح (10 ميغابايت).",
         });
       }
 
