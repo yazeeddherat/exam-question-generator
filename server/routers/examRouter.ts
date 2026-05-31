@@ -29,43 +29,44 @@ async function generateQuestionsFromText(
   const truncatedText = text.slice(0, 12000);
 
   const difficultyInstructions = {
-    easy: "الأسئلة يجب أن تكون سهلة وتختبر الفهم الأساسي والمعلومات المباشرة من النص. تجنب الأسئلة المعقدة والتفاصيل الدقيقة.",
-    medium: "الأسئلة يجب أن تكون متوسطة الصعوبة وتختبر الفهم والتطبيق. استخدم معلومات من النص مع بعض التحليل.",
-    hard: "الأسئلة يجب أن تكون صعبة وتختبر التحليل العميق والربط بين المفاهيم. استخدم تفاصيل دقيقة ومعقدة من النص.",
+    easy: "Questions should be easy and test basic understanding and direct information from the text. Avoid complex questions and fine details.",
+    medium: "Questions should be of medium difficulty and test understanding and application. Use information from the text with some analysis.",
+    hard: "Questions should be difficult and test deep analysis and connections between concepts. Use detailed and complex information from the text.",
   };
 
-  const systemPrompt = `أنت مساعد تعليمي متخصص في إنشاء أسئلة اختبار من نوع الاختيار من متعدد.
-مهمتك: إنشاء أسئلة اختبار دقيقة ومتنوعة بناءً على النص المقدم فقط.
-مستوى الصعوبة: ${difficulty}
+  const systemPrompt = `You are an educational assistant specialized in creating multiple-choice exam questions.
+Your task: Create accurate and diverse exam questions based solely on the provided text.
+Difficulty level: ${difficulty}
 ${difficultyInstructions[difficulty]}
 
-القواعد الصارمة:
-- استخدم فقط المعلومات الواردة في النص المقدم
-- لا تضف معلومات خارجية
-- تأكد من أن الإجابات الصحيحة موزعة بشكل عشوائي على الخيارات A وB وC وD
-- اجعل الخيارات الخاطئة معقولة وليست واضحة الخطأ
-- الأسئلة يجب أن تختبر الفهم الحقيقي وليس الحفظ السطحي`;
+Strict rules:
+- Use only information contained in the provided text
+- Do not add external information
+- Ensure correct answers are randomly distributed across options A, B, C, and D
+- Make incorrect options plausible and not obviously wrong
+- Questions should test real understanding, not surface memorization
+- IMPORTANT: Generate ALL questions, options, and explanations ONLY in English. No other language is allowed.`
 
-  const userPrompt = `بناءً على النص التالي فقط، أنشئ ${count} سؤال اختيار من متعدد.
+  const userPrompt = `Based solely on the following text, create ${count} multiple-choice questions. IMPORTANT: All questions, options, and explanations must be in English only.
 
-النص:
+Text:
 """
 ${truncatedText}
 """
 
-أعد الإجابة بصيغة JSON صالحة تماماً (بدون أي نص إضافي) بهذا الشكل:
+Return the response as valid JSON (without any additional text) in this format:
 {
   "questions": [
     {
-      "question": "نص السؤال",
+      "question": "Question text",
       "options": {
-        "A": "الخيار الأول",
-        "B": "الخيار الثاني",
-        "C": "الخيار الثالث",
-        "D": "الخيار الرابع"
+        "A": "First option",
+        "B": "Second option",
+        "C": "Third option",
+        "D": "Fourth option"
       },
       "correct": "A",
-      "explanation": "شرح مختصر للإجابة الصحيحة"
+      "explanation": "Brief explanation of the correct answer"
     }
   ]
 }`;
