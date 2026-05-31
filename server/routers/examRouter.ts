@@ -19,14 +19,26 @@ interface GeneratedQuestion {
   explanation: string;
 }
 
+type DifficultyLevel = "easy" | "medium" | "hard";
+
 async function generateQuestionsFromText(
   text: string,
-  count: number
+  count: number,
+  difficulty: DifficultyLevel = "medium"
 ): Promise<GeneratedQuestion[]> {
   const truncatedText = text.slice(0, 12000);
 
+  const difficultyInstructions = {
+    easy: "الأسئلة يجب أن تكون سهلة وتختبر الفهم الأساسي والمعلومات المباشرة من النص. تجنب الأسئلة المعقدة والتفاصيل الدقيقة.",
+    medium: "الأسئلة يجب أن تكون متوسطة الصعوبة وتختبر الفهم والتطبيق. استخدم معلومات من النص مع بعض التحليل.",
+    hard: "الأسئلة يجب أن تكون صعبة وتختبر التحليل العميق والربط بين المفاهيم. استخدم تفاصيل دقيقة ومعقدة من النص.",
+  };
+
   const systemPrompt = `أنت مساعد تعليمي متخصص في إنشاء أسئلة اختبار من نوع الاختيار من متعدد.
 مهمتك: إنشاء أسئلة اختبار دقيقة ومتنوعة بناءً على النص المقدم فقط.
+مستوى الصعوبة: ${difficulty}
+${difficultyInstructions[difficulty]}
+
 القواعد الصارمة:
 - استخدم فقط المعلومات الواردة في النص المقدم
 - لا تضف معلومات خارجية
@@ -120,10 +132,11 @@ export const examRouter = router({
         fileType: z.string().min(1),
         fileBase64: z.string().min(1),
         questionCount: z.number().int().min(3).max(30).default(10),
+        difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
       })
     )
     .mutation(async ({ input }) => {
-      const { fileName, fileType: mimeType, fileBase64, questionCount } = input;
+      const { fileName, fileType: mimeType, fileBase64, questionCount, difficulty } = input;
 
       // Detect file type
       const fileType = detectFileType(fileName, mimeType);
@@ -150,6 +163,7 @@ export const examRouter = router({
         fileName,
         fileType,
         questionCount,
+        difficulty,
         status: "processing",
       });
 
@@ -170,7 +184,7 @@ export const examRouter = router({
         }
 
         // Generate questions with AI
-        const generatedQuestions = await generateQuestionsFromText(cleanText, questionCount);
+        const generatedQuestions = await generateQuestionsFromText(cleanText, questionCount, difficulty);
 
         if (generatedQuestions.length === 0) {
           throw new TRPCError({
@@ -196,7 +210,7 @@ export const examRouter = router({
 
         await updateSessionStatus(sessionId, "ready");
 
-        return { sessionId, questionCount: generatedQuestions.length };
+        return { sessionId, questionCount: generatedQuestions.length, difficulty };
       } catch (error) {
         await updateSessionStatus(sessionId, "error");
         if (error instanceof TRPCError) throw error;
@@ -216,6 +230,6 @@ export const examRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "الجلسة غير موجودة." });
       }
       const questionList = await getSessionQuestions(input.sessionId);
-      return { session, questions: questionList };
+      return { session, questions: questionList, difficulty: session.difficulty };
     }),
 });

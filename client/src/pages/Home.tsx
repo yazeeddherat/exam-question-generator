@@ -48,6 +48,7 @@ export default function Home() {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [questionCount, setQuestionCount] = useState(10);
+  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [questions, setQuestions] = useState<QuestionData[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -127,6 +128,7 @@ export default function Home() {
       fileType: selectedFile.type || "application/octet-stream",
       fileBase64: base64,
       questionCount,
+      difficulty,
     });
   };
 
@@ -165,6 +167,7 @@ export default function Home() {
     setCurrentQuestion(0);
     setShowResults(false);
     setShowExplanations(false);
+    setDifficulty("medium");
   };
 
   const score = getScore();
@@ -291,6 +294,38 @@ export default function Home() {
                 <div className="flex justify-between text-xs mt-1" style={{ color: "oklch(0.60 0.03 250)" }}>
                   <span>3</span>
                   <span>30</span>
+                </div>
+              </div>
+
+              {/* Difficulty Level */}
+              <div className="mb-8">
+                <label className="font-semibold block mb-4" style={{ color: "oklch(0.22 0.08 260)" }}>مستوى صعوبة الأسئلة</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {(["easy", "medium", "hard"] as const).map((level) => {
+                    const labels = {
+                      easy: { label: "سهل", desc: "أساسي", color: "oklch(0.55 0.18 145)" },
+                      medium: { label: "متوسط", desc: "متوازن", color: "oklch(0.72 0.15 75)" },
+                      hard: { label: "صعب", desc: "متقدم", color: "oklch(0.55 0.22 25)" },
+                    };
+                    const info = labels[level];
+                    return (
+                      <button
+                        key={level}
+                        onClick={() => setDifficulty(level)}
+                        className="p-4 rounded-xl text-center transition-all border-2 font-semibold"
+                        style={{
+                          background: difficulty === level ? `${info.color}15` : "white",
+                          borderColor: difficulty === level ? info.color : "oklch(0.88 0.01 250)",
+                          color: difficulty === level ? info.color : "oklch(0.35 0.05 250)",
+                          boxShadow: difficulty === level ? `0 0 0 3px ${info.color}25` : "none",
+                        }}
+                      >
+                        <div className="text-2xl mb-1">{level === "easy" ? "🟢" : level === "medium" ? "🟡" : "🔴"}</div>
+                        <div className="text-sm font-bold">{info.label}</div>
+                        <div className="text-xs mt-1" style={{ color: "oklch(0.55 0.03 250)" }}>{info.desc}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -558,6 +593,12 @@ export default function Home() {
               {score} / {questions.length} إجابة صحيحة
             </h3>
             <p style={{ color: "oklch(0.50 0.03 250)" }}>{selectedFile?.name}</p>
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <span className="text-2xl">{difficulty === "easy" ? "🟢" : difficulty === "medium" ? "🟡" : "🔴"}</span>
+              <span className="text-sm font-semibold" style={{ color: difficulty === "easy" ? "oklch(0.55 0.18 145)" : difficulty === "medium" ? "oklch(0.72 0.15 75)" : "oklch(0.55 0.22 25)" }}>
+                مستوى الصعوبة: {difficulty === "easy" ? "سهل" : difficulty === "medium" ? "متوسط" : "صعب"}
+              </span>
+            </div>
 
             <div className="grid grid-cols-3 gap-4 mt-6">
               {[

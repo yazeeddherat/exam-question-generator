@@ -34,6 +34,7 @@ export const examSessions = mysqlTable("exam_sessions", {
   fileType: varchar("fileType", { length: 32 }).notNull(),
   fileKey: varchar("fileKey", { length: 512 }),
   questionCount: int("questionCount").notNull().default(10),
+  difficulty: mysqlEnum("difficulty", ["easy", "medium", "hard"]).default("medium").notNull(),
   status: mysqlEnum("status", ["pending", "processing", "ready", "error"]).default("pending").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -41,6 +42,7 @@ export const examSessions = mysqlTable("exam_sessions", {
 
 export type ExamSession = typeof examSessions.$inferSelect;
 export type InsertExamSession = typeof examSessions.$inferInsert;
+export type DifficultyLevel = "easy" | "medium" | "hard";
 
 export const questions = mysqlTable("questions", {
   id: int("id").autoincrement().primaryKey(),
