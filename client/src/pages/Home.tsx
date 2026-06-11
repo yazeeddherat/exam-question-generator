@@ -72,9 +72,9 @@ export default function Home() {
   };
 
   const handleFileChange = (file: File) => {
-    const maxSize = 100 * 1024 * 1024; // 100 ميجابايت
+    const maxSize = 1 * 1024 * 1024 * 1024; // 1GB
     if (file.size > maxSize) {
-      toast.error("حجم الملف يجب أن يكون أقل من 100 ميجابايت");
+      toast.error("حجم الملف يجب أن يكون أقل من 1GB");
       return;
     }
 
@@ -308,7 +308,7 @@ export default function Home() {
                       {selectedFile ? selectedFile.name : "اسحب الملف هنا أو انقر للرفع"}
                     </p>
                     <p className="text-sm" style={{ color: "oklch(0.50 0.03 250)" }}>
-                      جميع أنواع الملفات (حتى 100 ميجابايت)
+                      جميع أنواع الملفات (حتى 1GB)
                     </p>
                   </div>
                 </div>
