@@ -72,18 +72,13 @@ export default function Home() {
   };
 
   const handleFileChange = (file: File) => {
-    const maxSize = 10 * 1024 * 1024;
+    const maxSize = 100 * 1024 * 1024; // 100 ميجابايت
     if (file.size > maxSize) {
-      toast.error("حجم الملف يجب أن يكون أقل من 10 ميجابايت");
+      toast.error("حجم الملف يجب أن يكون أقل من 100 ميجابايت");
       return;
     }
 
-    const validTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation"];
-    if (!validTypes.includes(file.type)) {
-      toast.error("الملف يجب أن يكون PDF أو Word أو PowerPoint");
-      return;
-    }
-
+    // قبول جميع أنواع الملفات
     setSelectedFile(file);
   };
 
@@ -313,14 +308,13 @@ export default function Home() {
                       {selectedFile ? selectedFile.name : "اسحب الملف هنا أو انقر للرفع"}
                     </p>
                     <p className="text-sm" style={{ color: "oklch(0.50 0.03 250)" }}>
-                      PDF · Word · PowerPoint (حتى 20 ميجابايت)
+                      جميع أنواع الملفات (حتى 100 ميجابايت)
                     </p>
                   </div>
                 </div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx"
                   onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
                   className="hidden"
                 />

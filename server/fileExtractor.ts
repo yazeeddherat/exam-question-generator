@@ -11,14 +11,25 @@ const PDFParser: any = require("pdf2json");
 
 export type SupportedFileType = "pdf" | "docx" | "doc" | "pptx" | "ppt";
 
-export function detectFileType(filename: string, mimetype: string): SupportedFileType | null {
-  const ext = filename.toLowerCase().split(".").pop();
-  if (ext === "pdf" || mimetype === "application/pdf") return "pdf";
-  if (ext === "docx" || mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx";
-  if (ext === "doc" || mimetype === "application/msword") return "doc";
-  if (ext === "pptx" || mimetype === "application/vnd.openxmlformats-officedocument.presentationml.presentation") return "pptx";
-  if (ext === "ppt" || mimetype === "application/vnd.ms-powerpoint") return "ppt";
-  return null;
+export function detectFileType(filename: string, mimetype: string): SupportedFileType {
+  const ext = filename.toLowerCase().split(".").pop() || "";
+  
+  // محاولة اكتشاف من MIME type أولاً
+  if (mimetype === "application/pdf") return "pdf";
+  if (mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx";
+  if (mimetype === "application/msword") return "doc";
+  if (mimetype === "application/vnd.openxmlformats-officedocument.presentationml.presentation") return "pptx";
+  if (mimetype === "application/vnd.ms-powerpoint") return "ppt";
+  
+  // محاولة اكتشاف من الامتداد
+  if (ext === "pdf") return "pdf";
+  if (ext === "docx") return "docx";
+  if (ext === "doc") return "doc";
+  if (ext === "pptx") return "pptx";
+  if (ext === "ppt") return "ppt";
+  
+  // افتراض PDF كنوع افتراضي لأي ملف آخر
+  return "pdf";
 }
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
