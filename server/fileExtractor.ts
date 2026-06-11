@@ -65,7 +65,7 @@ export async function extractTextFromBuffer(buffer: Buffer, fileType: SupportedF
         parseOffice(buffer, (data: string, err: unknown) => {
           if (err) return reject(new Error(String(err)));
           resolve(data.trim());
-        });
+        }, { fileType: fileType === "pptx" ? "pptx" : "ppt" });
       });
     }
 

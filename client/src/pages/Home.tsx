@@ -1,50 +1,38 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
+import { BookOpen, FileText, Loader2, Download, Printer, RotateCcw, ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  Upload,
-  FileText,
-  FileSpreadsheet,
-  Presentation,
-  Loader2,
-  CheckCircle2,
-  XCircle,
-  ChevronLeft,
-  ChevronRight,
-  Award,
-  Printer,
-  RotateCcw,
-  BookOpen,
-
-  Info,
-} from "lucide-react";
+import type { Language } from "@shared/types";
 
 type AppState = "upload" | "loading" | "quiz" | "results";
-type Language = "ar" | "en";
 
 interface QuestionData {
   id: number;
-  questionText: string;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
-  correctAnswer: "A" | "B" | "C" | "D";
-  explanation: string | null;
-  orderIndex: number;
+  question: string;
+  options: string[];
+  correctAnswer: string;
+  explanation: string;
 }
 
 const FILE_TYPES = {
-  pdf: { icon: FileText, label: "PDF", color: "text-red-500" },
-  docx: { icon: FileSpreadsheet, label: "Word", color: "text-blue-500" },
-  doc: { icon: FileSpreadsheet, label: "Word", color: "text-blue-500" },
-  pptx: { icon: Presentation, label: "PowerPoint", color: "text-orange-500" },
-  ppt: { icon: Presentation, label: "PowerPoint", color: "text-orange-500" },
+  pdf: { name: "PDF", icon: FileText, color: "#dc2626" },
+  doc: { name: "Word", icon: FileText, color: "#2563eb" },
+  docx: { name: "Word", icon: FileText, color: "#2563eb" },
+  ppt: { name: "PowerPoint", icon: FileText, color: "#ea580c" },
+  pptx: { name: "PowerPoint", icon: FileText, color: "#ea580c" },
 };
 
-const ACCEPTED_TYPES = ".pdf,.doc,.docx,.ppt,.pptx";
-
 export default function Home() {
+  const { user } = useAuth();
+
   const [appState, setAppState] = useState<AppState>("upload");
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -57,7 +45,10 @@ export default function Home() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [showExplanations, setShowExplanations] = useState(false);
+  const [quizTimeLeft, setQuizTimeLeft] = useState(0);
+  const [quizStarted, setQuizStarted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const quizTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const generateMutation = trpc.exam.generateFromFile.useMutation({
     onSuccess: (data) => {
@@ -69,111 +60,77 @@ export default function Home() {
     },
   });
 
-  const sessionQuery = trpc.exam.getSession.useQuery(
-    { sessionId: sessionId! },
-    { enabled: !!sessionId, refetchInterval: false }
+  const getSessionQuery = trpc.exam.getSession.useQuery(
+    { sessionId: sessionId || 0 },
+    { enabled: sessionId !== null && appState === "loading" }
   );
 
-  // React to session data changes via useEffect
-  const sessionData = sessionQuery.data;
-  const processedSessionRef = useRef<number | null>(null);
+  const getScore = () => {
+    return questions.reduce((score, q, idx) => {
+      return score + (answers[idx] === q.correctAnswer ? 1 : 0);
+    }, 0);
+  };
 
-  useEffect(() => {
-    if (!sessionData || appState !== "loading") return;
-    const sid = sessionData.session.id;
-    if (processedSessionRef.current === sid) return;
-    if (sessionData.session.status === "ready") {
-      processedSessionRef.current = sid;
-      setQuestions(sessionData.questions as QuestionData[]);
-      setAppState("quiz");
-    } else if (sessionData.session.status === "error") {
-      processedSessionRef.current = sid;
-      toast.error("حدث خطأ أثناء توليد الأسئلة.");
-      setAppState("upload");
-    }
-  }, [sessionData, appState]);
-
-  const handleFile = useCallback((file: File) => {
-    const ext = file.name.toLowerCase().split(".").pop() ?? "";
-    if (!["pdf", "doc", "docx", "ppt", "pptx"].includes(ext)) {
-      toast.error("نوع الملف غير مدعوم. يرجى رفع PDF أو Word أو PowerPoint.");
+  const handleFileChange = (file: File) => {
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error("حجم الملف يجب أن يكون أقل من 10 ميجابايت");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("حجم الملف يتجاوز 10 ميغابايت.");
+
+    const validTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation"];
+    if (!validTypes.includes(file.type)) {
+      toast.error("الملف يجب أن يكون PDF أو Word أو PowerPoint");
       return;
     }
+
     setSelectedFile(file);
-  }, []);
+  };
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
 
-  const handleGenerate = async () => {
-    if (!selectedFile) return;
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length > 0) {
+      handleFileChange(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleGenerateClick = async () => {
+    if (!selectedFile) {
+      toast.error("الرجاء اختيار ملف أولاً");
+      return;
+    }
+
     setAppState("loading");
 
-    try {
-      // استخدام FileReader لتحويل الملف بشكل آمن
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        // استخراج base64 من data URL (بعد "base64,")
-        const base64 = dataUrl.split(",")[1] || "";
-        if (!base64) {
-          toast.error("فشل قراءة الملف. يرجى المحاولة مرة أخرى.");
-          setAppState("upload");
-          return;
-        }
-        generateMutation.mutate({
-          fileName: selectedFile.name,
-          fileType: selectedFile.type || "application/octet-stream",
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      try {
+        const fileName = selectedFile.name;
+        const fileType = fileExt || 'pdf';
+        await generateMutation.mutateAsync({
+          fileName,
+          fileType,
           fileBase64: base64,
           questionCount,
           difficulty,
           language,
         });
-      };
-      reader.onerror = () => {
-        const errorMsg = language === "ar" ? "خطأ في قراءة الملف. يرجى المحاولة مرة أخرى." : "Error reading file. Please try again.";
-        toast.error(errorMsg);
-        setAppState("upload");
-      };
-      reader.readAsDataURL(selectedFile);
-    } catch (error) {
-      const errorMsg = language === "ar" ? "حدث خطأ أثناء معالجة الملف." : "Error processing file.";
-      toast.error(errorMsg);
-      setAppState("upload");
-    }
-  };
-
-  const handleAnswer = (questionId: number, answer: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: answer }));
-  };
-
-  const getScore = () => {
-    let correct = 0;
-    questions.forEach((q) => {
-      if (answers[q.id] === q.correctAnswer) correct++;
-    });
-    return correct;
-  };
-
-  const getOptionClass = (q: QuestionData, option: string) => {
-    const selected = answers[q.id] === option;
-    if (!showResults) {
-      return selected ? "option-radio selected" : "option-radio";
-    }
-    if (option === q.correctAnswer) return "option-radio correct";
-    if (selected && option !== q.correctAnswer) return "option-radio wrong";
-    return "option-radio";
+      } catch (error) {
+        console.error("Error:", error);
+      }
+    };
+    reader.readAsDataURL(selectedFile);
   };
 
   const handlePrint = () => {
@@ -190,9 +147,11 @@ export default function Home() {
     setShowResults(false);
     setShowExplanations(false);
     setDifficulty("medium");
+    setQuizStarted(false);
+    setQuizTimeLeft(0);
+    if (quizTimerRef.current) clearInterval(quizTimerRef.current);
   };
 
-  // حساب الوقت المتوقع بناءً على عدد الأسئلة ومستوى الصعوبة
   const getEstimatedTime = () => {
     const timePerQuestion = {
       easy: 1.5,
@@ -214,6 +173,83 @@ export default function Home() {
     }, 1000);
     return () => clearInterval(timer);
   }, [appState, questionCount, difficulty]);
+
+  // حساب الوقت الكلي للاختبار بناءً على مستوى الصعوبة وعدد الأسئلة
+  const getTotalQuizTime = () => {
+    const timePerQuestion = {
+      easy: 60,      // دقيقة واحدة للسؤال السهل
+      medium: 90,    // دقيقة ونصف للسؤال المتوسط
+      hard: 120,     // دقيقتان للسؤال الصعب
+    };
+    return questions.length * timePerQuestion[difficulty];
+  };
+
+  // بدء مؤقت الاختبار عند الدخول لصفحة الأسئلة
+  useEffect(() => {
+    if (appState === "quiz" && !quizStarted && questions.length > 0) {
+      const totalTime = getTotalQuizTime();
+      setQuizTimeLeft(totalTime);
+      setQuizStarted(true);
+    }
+  }, [appState, questions.length, quizStarted]);
+
+  // مؤقت الاختبار
+  useEffect(() => {
+    if (!quizStarted || appState !== "quiz" || showResults) return;
+
+    quizTimerRef.current = setInterval(() => {
+      setQuizTimeLeft((prev) => {
+        if (prev <= 1) {
+          setShowResults(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (quizTimerRef.current) clearInterval(quizTimerRef.current);
+    };
+  }, [quizStarted, appState, showResults]);
+
+  useEffect(() => {
+    if (getSessionQuery.data) {
+      const mappedQuestions = getSessionQuery.data.questions.map(q => ({
+        id: q.id,
+        question: q.questionText,
+        options: [q.optionA, q.optionB, q.optionC, q.optionD],
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation || '',
+      }));
+      setQuestions(mappedQuestions);
+      setAppState("quiz");
+    }
+  }, [getSessionQuery.data]);
+
+  const handleAnswerChange = (answer: string) => {
+    setAnswers((prev) => ({
+      ...prev,
+      [currentQuestion]: answer,
+    }));
+  };
+
+  const handleNextQuestion = () => {
+    if (currentQuestion < questions.length - 1) {
+      setCurrentQuestion(currentQuestion + 1);
+    } else {
+      setShowResults(true);
+    }
+  };
+
+  const handlePrevQuestion = () => {
+    if (currentQuestion > 0) {
+      setCurrentQuestion(currentQuestion - 1);
+    }
+  };
+
+  const getRadioClass = (optionIndex: number) => {
+    return "option-radio";
+  };
 
   const score = getScore();
   const percentage = questions.length > 0 ? Math.round((score / questions.length) * 100) : 0;
@@ -253,186 +289,139 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Upload Card */}
+          {/* Main Card */}
           <div className="max-w-2xl mx-auto">
-            <div className="luxury-card rounded-2xl p-8">
-              {/* Drop Zone */}
+            <div className="luxury-card rounded-3xl p-8 md:p-12">
+              {/* File Upload */}
               <div
-                className={`upload-zone rounded-xl p-10 text-center cursor-pointer mb-6 ${dragOver ? "drag-over" : ""}`}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
+                className="mb-8 p-8 rounded-2xl border-2 border-dashed transition-all cursor-pointer"
+                style={{
+                  borderColor: dragOver ? "oklch(0.72 0.15 75)" : "oklch(0.72 0.15 75 / 0.3)",
+                  background: dragOver ? "oklch(0.72 0.15 75 / 0.05)" : "oklch(0.95 0.01 75)",
+                }}
               >
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 rounded-xl flex items-center justify-center gold-gradient">
+                    <FileIcon className="w-8 h-8 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-bold" style={{ color: "oklch(0.22 0.08 260)" }}>
+                      {selectedFile ? selectedFile.name : "اسحب الملف هنا أو انقر للرفع"}
+                    </p>
+                    <p className="text-sm" style={{ color: "oklch(0.50 0.03 250)" }}>
+                      PDF · Word · PowerPoint (حتى 20 ميجابايت)
+                    </p>
+                  </div>
+                </div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept={ACCEPTED_TYPES}
+                  accept=".pdf,.doc,.docx,.ppt,.pptx"
+                  onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
                   className="hidden"
-                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
                 />
-                {selectedFile ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "oklch(0.72 0.15 75 / 0.15)" }}>
-                      <FileIcon className="w-8 h-8" style={{ color: "oklch(0.65 0.18 65)" }} />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-lg" style={{ color: "oklch(0.22 0.08 260)" }}>{selectedFile.name}</p>
-                      <p className="text-sm mt-1" style={{ color: "oklch(0.50 0.03 250)" }}>
-                        {(selectedFile.size / 1024 / 1024).toFixed(2)} ميغابايت
-                      </p>
-                    </div>
-                    <div
-                      className="text-sm underline cursor-pointer"
-                      style={{ color: "oklch(0.55 0.15 65)" }}
-                      onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedFile(null); } }}
-                    >
-                      تغيير الملف
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: "oklch(0.72 0.15 75 / 0.12)" }}>
-                      <Upload className="w-10 h-10" style={{ color: "oklch(0.65 0.18 65)" }} />
-                    </div>
-                    <div>
-                      <p className="font-bold text-xl mb-1" style={{ color: "oklch(0.22 0.08 260)" }}>اسحب الملف هنا أو انقر للرفع</p>
-                      <p className="text-sm" style={{ color: "oklch(0.50 0.03 250)" }}>PDF · Word · PowerPoint · حتى 20 ميغابايت</p>
-                    </div>
-                    <div className="flex gap-3">
-                      {[
-                        { label: "PDF", color: "text-red-500", bg: "bg-red-50" },
-                        { label: "Word", color: "text-blue-500", bg: "bg-blue-50" },
-                        { label: "PowerPoint", color: "text-orange-500", bg: "bg-orange-50" },
-                      ].map((t) => (
-                        <span key={t.label} className={`px-3 py-1 rounded-full text-xs font-semibold ${t.color} ${t.bg}`}>{t.label}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Question Count */}
               <div className="mb-8">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="font-semibold" style={{ color: "oklch(0.22 0.08 260)" }}>عدد الأسئلة</label>
-                  <span className="text-2xl font-extrabold" style={{ color: "oklch(0.65 0.18 65)" }}>{questionCount}</span>
+                <div className="flex justify-between items-center mb-3">
+                  <Label className="text-base font-bold" style={{ color: "oklch(0.22 0.08 260)" }}>
+                    عدد الأسئلة
+                  </Label>
+                  <span className="text-2xl font-extrabold" style={{ color: "oklch(0.72 0.15 75)" }}>
+                    {questionCount}
+                  </span>
                 </div>
-                <input
-                  type="range"
+                <Slider
+                  value={[questionCount]}
+                  onValueChange={(v) => setQuestionCount(v[0])}
                   min={3}
                   max={30}
-                  value={questionCount}
-                  onChange={(e) => setQuestionCount(Number(e.target.value))}
-                  className="w-full h-2 rounded-full appearance-none cursor-pointer"
-                  style={{
-                    background: `linear-gradient(to left, oklch(0.88 0.01 250) 0%, oklch(0.88 0.01 250) ${100 - ((questionCount - 3) / 27) * 100}%, oklch(0.72 0.15 75) ${100 - ((questionCount - 3) / 27) * 100}%, oklch(0.22 0.08 260) 100%)`,
-                  }}
+                  step={1}
+                  className="w-full"
                 />
-                <div className="flex justify-between text-xs mt-1" style={{ color: "oklch(0.60 0.03 250)" }}>
-                  <span>3</span>
-                  <span>30</span>
-                </div>
               </div>
 
-              {/* Difficulty Level */}
+              {/* Difficulty */}
               <div className="mb-8">
-                <label className="font-semibold block mb-4" style={{ color: "oklch(0.22 0.08 260)" }}>مستوى صعوبة الأسئلة</label>
+                <Label className="block text-base font-bold mb-4" style={{ color: "oklch(0.22 0.08 260)" }}>
+                  مستوى صعوبة الأسئلة
+                </Label>
                 <div className="grid grid-cols-3 gap-3">
-                  {(["easy", "medium", "hard"] as const).map((level) => {
-                    const labels = {
-                      easy: { label: "سهل", desc: "أساسي", color: "oklch(0.55 0.18 145)" },
-                      medium: { label: "متوسط", desc: "متوازن", color: "oklch(0.72 0.15 75)" },
-                      hard: { label: "صعب", desc: "متقدم", color: "oklch(0.55 0.22 25)" },
-                    };
-                    const info = labels[level];
-                    return (
-                      <button
-                        key={level}
-                        onClick={() => setDifficulty(level)}
-                        className="p-4 rounded-xl text-center transition-all border-2 font-semibold"
-                        style={{
-                          background: difficulty === level ? `${info.color}15` : "white",
-                          borderColor: difficulty === level ? info.color : "oklch(0.88 0.01 250)",
-                          color: difficulty === level ? info.color : "oklch(0.35 0.05 250)",
-                          boxShadow: difficulty === level ? `0 0 0 3px ${info.color}25` : "none",
-                        }}
-                      >
-                        <div className="text-2xl mb-1">{level === "easy" ? "🟢" : level === "medium" ? "🟡" : "🔴"}</div>
-                        <div className="text-sm font-bold">{info.label}</div>
-                        <div className="text-xs mt-1" style={{ color: "oklch(0.55 0.03 250)" }}>{info.desc}</div>
-                      </button>
-                    );
-                  })}
+                  {[
+                    { value: "easy", label: "سهل", color: "oklch(0.55 0.18 65)", emoji: "🟢" },
+                    { value: "medium", label: "متوسط", color: "oklch(0.72 0.15 75)", emoji: "🟡" },
+                    { value: "hard", label: "صعب", color: "oklch(0.60 0.20 30)", emoji: "🔴" },
+                  ].map(({ value, label, color, emoji }) => (
+                    <div
+                      key={value}
+                      onClick={() => setDifficulty(value as "easy" | "medium" | "hard")}
+                      className="p-4 rounded-xl border-2 transition-all cursor-pointer text-center"
+                      style={{
+                        borderColor: difficulty === value ? color : "oklch(0.85 0.05 250)",
+                        background: difficulty === value ? `${color}15` : "white",
+                      }}
+                    >
+                      <div className="text-2xl mb-1">{emoji}</div>
+                      <p className="font-bold text-sm" style={{ color: difficulty === value ? color : "oklch(0.35 0.05 250)" }}>
+                        {label}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Language Selection */}
+              {/* Language */}
               <div className="mb-8">
-                <label className="font-semibold block mb-4" style={{ color: "oklch(0.22 0.08 260)" }}>لغة الأسئلة</label>
+                <Label className="block text-base font-bold mb-4" style={{ color: "oklch(0.22 0.08 260)" }}>
+                  لغة الأسئلة
+                </Label>
                 <div className="grid grid-cols-2 gap-3">
-                  {(["ar", "en"] as const).map((lang) => {
-                    const labels = {
-                      ar: { label: "العربية", flag: "🇸🇦" },
-                      en: { label: "English", flag: "🇬🇧" },
-                    };
-                    const info = labels[lang];
-                    return (
-                      <button
-                        key={lang}
-                        onClick={() => setLanguage(lang)}
-                        className="p-4 rounded-xl text-center transition-all border-2 font-semibold"
-                        style={{
-                          background: language === lang ? "oklch(0.72 0.15 75 / 0.15)" : "white",
-                          borderColor: language === lang ? "oklch(0.72 0.15 75)" : "oklch(0.88 0.01 250)",
-                          color: language === lang ? "oklch(0.72 0.15 75)" : "oklch(0.35 0.05 250)",
-                          boxShadow: language === lang ? "0 0 0 3px oklch(0.72 0.15 75 / 0.25)" : "none",
-                        }}
-                      >
-                        <div className="text-2xl mb-1">{info.flag}</div>
-                        <div className="text-sm font-bold">{info.label}</div>
-                      </button>
-                    );
-                  })}
+                  {[
+                    { value: "ar", label: "العربية", flag: "🇸🇦" },
+                    { value: "en", label: "English", flag: "🇬🇧" },
+                  ].map(({ value, label, flag }) => (
+                    <div
+                      key={value}
+                      onClick={() => setLanguage(value as Language)}
+                      className="p-4 rounded-xl border-2 transition-all cursor-pointer text-center"
+                      style={{
+                        borderColor: language === value ? "oklch(0.72 0.15 75)" : "oklch(0.85 0.05 250)",
+                        background: language === value ? "oklch(0.72 0.15 75 / 0.15)" : "white",
+                      }}
+                    >
+                      <div className="text-2xl mb-1">{flag}</div>
+                      <p className="font-bold text-sm" style={{ color: language === value ? "oklch(0.72 0.15 75)" : "oklch(0.35 0.05 250)" }}>
+                        {label}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               {/* Generate Button */}
-              <button
-                className="w-full py-4 rounded-xl text-lg font-bold btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!selectedFile}
-                onClick={handleGenerate}
+              <Button
+                onClick={handleGenerateClick}
+                disabled={!selectedFile || generateMutation.isPending}
+                className="w-full py-6 text-lg font-bold rounded-xl transition-all"
+                style={{
+                  background: selectedFile ? "oklch(0.72 0.15 75)" : "oklch(0.72 0.15 75 / 0.5)",
+                  color: "white",
+                }}
               >
-                <span className="flex items-center justify-center gap-2">
-                  توليد {questionCount} سؤال
-                </span>
-              </button>
-
-              {/* Info note */}
-              <div className="flex items-start gap-2 mt-4 p-3 rounded-lg" style={{ background: "oklch(0.72 0.15 75 / 0.08)" }}>
-                <Info className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "oklch(0.65 0.18 65)" }} />
-                <p className="text-xs" style={{ color: "oklch(0.50 0.03 250)" }}>
-                  الأسئلة تُولَّد من محتوى ملفك فقط.
-                </p>
-              </div>
-            </div>
-
-            {/* Features */}
-            <div className="grid grid-cols-3 gap-4 mt-8">
-              {[
-                { icon: "🎯", title: "دقة عالية", desc: "أسئلة مبنية على المحتوى فقط" },
-                { icon: "⚡", title: "توليد سريع", desc: "نتائج في ثوانٍ معدودة" },
-                { icon: "📊", title: "تقييم فوري", desc: "نتيجة وتحليل مباشر" },
-              ].map((f) => (
-                <div key={f.title} className="luxury-card rounded-xl p-4 text-center">
-                  <div className="text-2xl mb-2">{f.icon}</div>
-                  <p className="font-bold text-sm mb-1" style={{ color: "oklch(0.22 0.08 260)" }}>{f.title}</p>
-                  <p className="text-xs" style={{ color: "oklch(0.55 0.03 250)" }}>{f.desc}</p>
-                </div>
-              ))}
+                {generateMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin inline" />
+                    جاري التحضير...
+                  </>
+                ) : (
+                  "توليد الأسئلة"
+                )}
+              </Button>
             </div>
           </div>
         </main>
@@ -455,18 +444,10 @@ export default function Home() {
               <Loader2 className="w-10 h-10 text-white animate-spin" />
             </div>
           </div>
-          <h3 className="text-2xl font-extrabold mb-2" style={{ color: "oklch(0.22 0.08 260)" }}>جارٍ التحليل والتوليد</h3>
-          <p className="mb-4" style={{ color: "oklch(0.50 0.03 250)" }}>
-            يقوم الذكاء الاصطناعي بتحليل محتوى ملفك وتوليد {questionCount} سؤال ({difficultyLabel})...
+          <h3 className="text-2xl font-extrabold mb-2" style={{ color: "oklch(0.22 0.08 260)" }}>جاري التحضير</h3>
+          <p className="mb-6" style={{ color: "oklch(0.50 0.03 250)" }}>
+            يتم تحضير {questionCount} سؤال ({difficultyLabel}) للاختبار...
           </p>
-          
-          {/* Timer */}
-          <div className="mb-6 p-4 rounded-xl" style={{ background: "oklch(0.72 0.15 75 / 0.1)", border: "1px solid oklch(0.72 0.15 75 / 0.3)" }}>
-            <p className="text-xs mb-2" style={{ color: "oklch(0.50 0.03 250)" }}>الوقت المتوقع المتبقي</p>
-            <div className="text-3xl font-bold" style={{ color: "oklch(0.72 0.15 75)" }}>
-              {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
-            </div>
-          </div>
 
           <div className="space-y-3">
             {["استخراج النص من الملف", "تحليل المحتوى بالذكاء الاصطناعي", "توليد الأسئلة والخيارات"].map((step, i) => (
@@ -486,132 +467,106 @@ export default function Home() {
   // ─── QUIZ STATE ────────────────────────────────────────────────────────────
   if (appState === "quiz" && !showResults) {
     const q = questions[currentQuestion];
-    const answered = Object.keys(answers).length;
-    const progress = (answered / questions.length) * 100;
+    const quizMinutes = Math.floor(quizTimeLeft / 60);
+    const quizSeconds = quizTimeLeft % 60;
 
     return (
       <div className="min-h-screen" style={{ background: "linear-gradient(160deg, oklch(0.97 0.005 250) 0%, oklch(0.93 0.015 75) 100%)" }}>
         {/* Header */}
-        <header className="no-print sticky top-0 z-10" style={{ background: "oklch(0.22 0.08 260 / 0.95)", backdropFilter: "blur(12px)", borderBottom: "1px solid oklch(0.30 0.08 260)" }}>
-          <div className="container py-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5" style={{ color: "oklch(0.72 0.15 75)" }} />
-                <span className="text-white font-semibold text-sm">{selectedFile?.name}</span>
+        <header className="no-print sticky top-0 z-50" style={{ background: "oklch(0.22 0.08 260)", borderBottom: "1px solid oklch(0.30 0.08 260)" }}>
+          <div className="container py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center gold-gradient">
+                <BookOpen className="w-5 h-5 text-white" />
               </div>
-              <span className="text-sm font-bold" style={{ color: "oklch(0.72 0.15 75)" }}>
-                {answered}/{questions.length} مجاب
-              </span>
+              <div>
+                <h1 className="text-white font-bold text-lg">الاختبار</h1>
+              </div>
             </div>
-            <div className="h-1.5 rounded-full" style={{ background: "oklch(0.30 0.08 260)" }}>
-              <div className="progress-bar h-1.5" style={{ width: `${progress}%` }} />
+
+            {/* Timer */}
+            <div className="flex items-center gap-2 px-4 py-2 rounded-lg" style={{ background: quizTimeLeft < 300 ? "oklch(0.60 0.20 30 / 0.2)" : "oklch(0.72 0.15 75 / 0.2)" }}>
+              <Clock className="w-5 h-5" style={{ color: quizTimeLeft < 300 ? "oklch(0.60 0.20 30)" : "oklch(0.72 0.15 75)" }} />
+              <span className="font-bold text-white">
+                {String(quizMinutes).padStart(2, "0")}:{String(quizSeconds).padStart(2, "0")}
+              </span>
             </div>
           </div>
         </header>
 
-        <main className="container py-8 max-w-3xl">
-          {/* Question Navigator */}
-          <div className="flex flex-wrap gap-2 mb-6 no-print">
-            {questions.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentQuestion(idx)}
-                className="w-9 h-9 rounded-lg text-sm font-bold transition-all"
+        <main className="container py-8">
+          {/* Progress */}
+          <div className="mb-8">
+            <div className="flex justify-between items-center mb-2">
+              <span style={{ color: "oklch(0.35 0.05 250)" }}>
+                السؤال {currentQuestion + 1} من {questions.length}
+              </span>
+              <span style={{ color: "oklch(0.72 0.15 75)" }} className="font-bold">
+                {Math.round(((currentQuestion + 1) / questions.length) * 100)}%
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full" style={{ background: "oklch(0.85 0.05 250)" }}>
+              <div
+                className="h-full rounded-full transition-all"
                 style={{
-                  background: idx === currentQuestion
-                    ? "oklch(0.72 0.15 75)"
-                    : answers[questions[idx].id]
-                    ? "oklch(0.22 0.08 260)"
-                    : "white",
-                  color: idx === currentQuestion || answers[questions[idx].id]
-                    ? "white"
-                    : "oklch(0.40 0.05 250)",
-                  border: `1px solid ${idx === currentQuestion ? "oklch(0.72 0.15 75)" : "oklch(0.88 0.01 250)"}`,
+                  width: `${((currentQuestion + 1) / questions.length) * 100}%`,
+                  background: "oklch(0.72 0.15 75)",
                 }}
-              >
-                {idx + 1}
-              </button>
-            ))}
+              />
+            </div>
           </div>
 
           {/* Question Card */}
-          <div className="luxury-card rounded-2xl p-8 mb-6">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 gold-gradient">
-                <span className="text-white font-extrabold text-sm">{currentQuestion + 1}</span>
-              </div>
-              <h3 className="text-xl font-bold leading-relaxed" style={{ color: "oklch(0.15 0.02 250)" }}>
-                {q.questionText}
-              </h3>
-            </div>
+          <div className="max-w-2xl mx-auto">
+            <div className="luxury-card rounded-3xl p-8 md:p-12 mb-8">
+              <h2 className="text-2xl md:text-3xl font-bold mb-8" style={{ color: "oklch(0.22 0.08 260)" }}>
+                {q.question}
+              </h2>
 
-            <div className="space-y-3">
-              {(["A", "B", "C", "D"] as const).map((opt) => {
-                const text = q[`option${opt}` as keyof QuestionData] as string;
-                return (
-                  <label
-                    key={opt}
-                    className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer ${getOptionClass(q, opt)}`}
-                    style={{ borderColor: "oklch(0.88 0.01 250)" }}
-                  >
-                    <div className="relative shrink-0">
-                      <input
-                        type="radio"
-                        name={`q-${q.id}`}
-                        value={opt}
-                        checked={answers[q.id] === opt}
-                        onChange={() => handleAnswer(q.id, opt)}
-                        className="sr-only"
-                      />
-                      <div
-                        className="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all"
-                        style={{
-                          borderColor: answers[q.id] === opt ? "oklch(0.65 0.18 65)" : "oklch(0.70 0.03 250)",
-                          background: answers[q.id] === opt ? "oklch(0.72 0.15 75)" : "white",
-                        }}
-                      >
-                        {answers[q.id] === opt && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
-                      </div>
+              {/* Options */}
+              <RadioGroup value={answers[currentQuestion] || ""} onValueChange={handleAnswerChange}>
+                <div className="space-y-4">
+                  {q.options.map((option, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer"
+                      style={{
+                        borderColor: answers[currentQuestion] === option ? "oklch(0.72 0.15 75)" : "oklch(0.85 0.05 250)",
+                        background: answers[currentQuestion] === option ? "oklch(0.72 0.15 75 / 0.1)" : "white",
+                      }}
+                      onClick={() => handleAnswerChange(option)}
+                    >
+                      <RadioGroupItem value={option} id={`option-${idx}`} className={getRadioClass(idx)} />
+                      <Label htmlFor={`option-${idx}`} className="flex-1 cursor-pointer font-medium">
+                        {option}
+                      </Label>
                     </div>
-                    <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold shrink-0" style={{ background: "oklch(0.93 0.015 250)", color: "oklch(0.35 0.05 250)" }}>
-                      {opt}
-                    </span>
-                    <span className="text-base leading-relaxed" style={{ color: "oklch(0.20 0.03 250)" }}>{text}</span>
-                  </label>
-                );
-              })}
+                  ))}
+                </div>
+              </RadioGroup>
             </div>
-          </div>
 
-          {/* Navigation */}
-          <div className="flex items-center justify-between no-print">
-            <button
-              onClick={() => setCurrentQuestion((p) => Math.max(0, p - 1))}
-              disabled={currentQuestion === 0}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold disabled:opacity-40 transition-all"
-              style={{ background: "white", border: "1px solid oklch(0.88 0.01 250)", color: "oklch(0.35 0.05 250)" }}
-            >
-              <ChevronRight className="w-4 h-4" />
-              السابق
-            </button>
+            {/* Navigation */}
+            <div className="flex gap-4 justify-between">
+              <Button
+                onClick={handlePrevQuestion}
+                disabled={currentQuestion === 0}
+                variant="outline"
+                className="flex-1"
+              >
+                <ChevronLeft className="w-4 h-4 mr-2" />
+                السابق
+              </Button>
 
-            {currentQuestion < questions.length - 1 ? (
-              <button
-                onClick={() => setCurrentQuestion((p) => Math.min(questions.length - 1, p + 1))}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold btn-primary"
+              <Button
+                onClick={handleNextQuestion}
+                className="flex-1"
+                style={{ background: "oklch(0.72 0.15 75)", color: "white" }}
               >
-                التالي
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                onClick={() => { setShowResults(true); setAppState("results"); }}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold btn-gold"
-              >
-                <Award className="w-5 h-5" />
-                إنهاء الاختبار وعرض النتيجة
-              </button>
-            )}
+                {currentQuestion === questions.length - 1 ? "إنهاء الاختبار" : "التالي"}
+                <ChevronRight className="w-4 h-4 ml-2" />
+              </Button>
+            </div>
           </div>
         </main>
       </div>
@@ -619,166 +574,134 @@ export default function Home() {
   }
 
   // ─── RESULTS STATE ─────────────────────────────────────────────────────────
-  if (appState === "results" || showResults) {
-    const grade = percentage >= 90 ? "ممتاز" : percentage >= 75 ? "جيد جداً" : percentage >= 60 ? "جيد" : percentage >= 50 ? "مقبول" : "ضعيف";
-    const gradeColor = percentage >= 90 ? "oklch(0.55 0.18 145)" : percentage >= 75 ? "oklch(0.55 0.18 200)" : percentage >= 60 ? "oklch(0.65 0.18 65)" : percentage >= 50 ? "oklch(0.65 0.15 50)" : "oklch(0.55 0.22 25)";
-
+  if (appState === "quiz" && showResults) {
     return (
       <div className="min-h-screen" style={{ background: "linear-gradient(160deg, oklch(0.97 0.005 250) 0%, oklch(0.93 0.015 75) 100%)" }}>
-        {/* Print Header */}
-        <div className="hidden print-only p-6 border-b">
-          <h1 className="text-2xl font-bold">أسئلة اختبار - {selectedFile?.name}</h1>
-          <p className="text-sm text-gray-500 mt-1">تاريخ التوليد: {new Date().toLocaleDateString("ar-SA")}</p>
-        </div>
-
         {/* Header */}
         <header className="no-print" style={{ background: "oklch(0.22 0.08 260)", borderBottom: "1px solid oklch(0.30 0.08 260)" }}>
           <div className="container py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <BookOpen className="w-6 h-6" style={{ color: "oklch(0.72 0.15 75)" }} />
-              <span className="text-white font-bold">نتيجة الاختبار</span>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all" style={{ background: "oklch(0.30 0.08 260)", color: "oklch(0.85 0.10 75)" }}>
-                <Printer className="w-4 h-4" />
-                طباعة
-              </button>
-              <button onClick={handleReset} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold btn-gold">
-                <RotateCcw className="w-4 h-4" />
-                اختبار جديد
-              </button>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center gold-gradient">
+                <BookOpen className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-white font-bold text-lg">النتائج</h1>
+              </div>
             </div>
           </div>
         </header>
 
-        <main className="container py-8 max-w-3xl">
+        <main className="container py-12">
           {/* Score Card */}
-          <div className="luxury-card rounded-2xl p-8 mb-8 text-center no-print">
-            <div className="relative w-36 h-36 mx-auto mb-6">
-              <svg className="w-36 h-36 -rotate-90" viewBox="0 0 144 144">
-                <circle cx="72" cy="72" r="60" fill="none" stroke="oklch(0.93 0.015 250)" strokeWidth="12" />
-                <circle
-                  cx="72" cy="72" r="60" fill="none"
-                  stroke={gradeColor}
-                  strokeWidth="12"
-                  strokeLinecap="round"
-                  strokeDasharray={`${2 * Math.PI * 60}`}
-                  strokeDashoffset={`${2 * Math.PI * 60 * (1 - percentage / 100)}`}
-                  style={{ transition: "stroke-dashoffset 1s cubic-bezier(0.23, 1, 0.32, 1)" }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl font-extrabold" style={{ color: gradeColor }}>{percentage}%</span>
-                <span className="text-sm font-semibold" style={{ color: "oklch(0.55 0.03 250)" }}>{grade}</span>
-              </div>
-            </div>
-            <h3 className="text-2xl font-extrabold mb-2" style={{ color: "oklch(0.22 0.08 260)" }}>
-              {score} / {questions.length} إجابة صحيحة
-            </h3>
-            <p style={{ color: "oklch(0.50 0.03 250)" }}>{selectedFile?.name}</p>
-            <div className="flex items-center justify-center gap-2 mt-3">
-              <span className="text-2xl">{difficulty === "easy" ? "🟢" : difficulty === "medium" ? "🟡" : "🔴"}</span>
-              <span className="text-sm font-semibold" style={{ color: difficulty === "easy" ? "oklch(0.55 0.18 145)" : difficulty === "medium" ? "oklch(0.72 0.15 75)" : "oklch(0.55 0.22 25)" }}>
-                مستوى الصعوبة: {difficulty === "easy" ? "سهل" : difficulty === "medium" ? "متوسط" : "صعب"}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 mt-6">
-              {[
-                { label: "صحيح", value: score, color: "oklch(0.55 0.18 145)", bg: "oklch(0.95 0.05 145)" },
-                { label: "خطأ", value: questions.length - score, color: "oklch(0.55 0.22 25)", bg: "oklch(0.97 0.04 25)" },
-                { label: "لم يُجب", value: questions.length - Object.keys(answers).length, color: "oklch(0.55 0.03 250)", bg: "oklch(0.95 0.01 250)" },
-              ].map((s) => (
-                <div key={s.label} className="rounded-xl p-3" style={{ background: s.bg }}>
-                  <p className="text-2xl font-extrabold" style={{ color: s.color }}>{s.value}</p>
-                  <p className="text-xs font-medium" style={{ color: s.color }}>{s.label}</p>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setShowExplanations(!showExplanations)}
-              className="mt-6 px-6 py-2.5 rounded-xl font-semibold text-sm transition-all"
-              style={{ background: "oklch(0.93 0.015 250)", color: "oklch(0.35 0.05 250)", border: "1px solid oklch(0.88 0.01 250)" }}
-            >
-              {showExplanations ? "إخفاء" : "عرض"} الإجابات والشرح
-            </button>
-          </div>
-
-          {/* Questions Review */}
-          <div className="space-y-6">
-            {questions.map((q, idx) => {
-              const userAnswer = answers[q.id];
-              const isCorrect = userAnswer === q.correctAnswer;
-              const isUnanswered = !userAnswer;
-
-              return (
-                <div key={q.id} className="luxury-card rounded-2xl p-6">
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: isUnanswered ? "oklch(0.93 0.015 250)" : isCorrect ? "oklch(0.95 0.05 145)" : "oklch(0.97 0.04 25)" }}>
-                      {isUnanswered ? (
-                        <span className="font-bold text-sm" style={{ color: "oklch(0.55 0.03 250)" }}>{idx + 1}</span>
-                      ) : isCorrect ? (
-                        <CheckCircle2 className="w-5 h-5" style={{ color: "oklch(0.55 0.18 145)" }} />
-                      ) : (
-                        <XCircle className="w-5 h-5" style={{ color: "oklch(0.55 0.22 25)" }} />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-bold text-base leading-relaxed mb-3" style={{ color: "oklch(0.15 0.02 250)" }}>
-                        {idx + 1}. {q.questionText}
-                      </p>
-                      <div className="space-y-2">
-                        {(["A", "B", "C", "D"] as const).map((opt) => {
-                          const text = q[`option${opt}` as keyof QuestionData] as string;
-                          const isCorrectOpt = opt === q.correctAnswer;
-                          const isUserOpt = opt === userAnswer;
-                          return (
-                            <div
-                              key={opt}
-                              className="flex items-center gap-3 p-3 rounded-lg text-sm"
-                              style={{
-                                background: isCorrectOpt
-                                  ? "oklch(0.95 0.05 145)"
-                                  : isUserOpt && !isCorrectOpt
-                                  ? "oklch(0.97 0.04 25)"
-                                  : "oklch(0.97 0.005 250)",
-                                border: `1px solid ${isCorrectOpt ? "oklch(0.75 0.12 145)" : isUserOpt && !isCorrectOpt ? "oklch(0.75 0.15 25)" : "oklch(0.90 0.01 250)"}`,
-                              }}
-                            >
-                              <span className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0" style={{ background: isCorrectOpt ? "oklch(0.55 0.18 145)" : isUserOpt && !isCorrectOpt ? "oklch(0.55 0.22 25)" : "oklch(0.88 0.01 250)", color: isCorrectOpt || (isUserOpt && !isCorrectOpt) ? "white" : "oklch(0.40 0.05 250)" }}>
-                                {opt}
-                              </span>
-                              <span style={{ color: "oklch(0.20 0.03 250)" }}>{text}</span>
-                              {isCorrectOpt && <CheckCircle2 className="w-4 h-4 mr-auto shrink-0" style={{ color: "oklch(0.55 0.18 145)" }} />}
-                              {isUserOpt && !isCorrectOpt && <XCircle className="w-4 h-4 mr-auto shrink-0" style={{ color: "oklch(0.55 0.22 25)" }} />}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {showExplanations && q.explanation && (
-                        <div className="mt-3 p-3 rounded-lg text-sm" style={{ background: "oklch(0.95 0.01 75)", borderRight: "3px solid oklch(0.72 0.15 75)" }}>
-                          <span className="font-semibold" style={{ color: "oklch(0.55 0.15 65)" }}>الشرح: </span>
-                          <span style={{ color: "oklch(0.35 0.05 250)" }}>{q.explanation}</span>
-                        </div>
-                      )}
+          <div className="max-w-2xl mx-auto mb-12">
+            <div className="luxury-card rounded-3xl p-12 text-center mb-8">
+              <div className="mb-8">
+                <div className="w-40 h-40 mx-auto rounded-full flex items-center justify-center gold-gradient mb-6">
+                  <div className="text-center">
+                    <div className="text-5xl font-extrabold text-white">{percentage}%</div>
+                    <div className="text-white text-sm mt-2">
+                      {score}/{questions.length}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
 
-          {/* Bottom Actions */}
-          <div className="flex gap-4 mt-8 no-print">
-            <button onClick={handlePrint} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold" style={{ background: "white", border: "1px solid oklch(0.88 0.01 250)", color: "oklch(0.35 0.05 250)" }}>
-              <Printer className="w-5 h-5" />
-              طباعة / تصدير
-            </button>
-            <button onClick={handleReset} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold btn-gold">
-              <RotateCcw className="w-5 h-5" />
-              اختبار جديد
-            </button>
+              <h2 className="text-3xl font-extrabold mb-2" style={{ color: "oklch(0.22 0.08 260)" }}>
+                {percentage >= 80 ? "ممتاز!" : percentage >= 60 ? "جيد" : "يمكن تحسينه"}
+              </h2>
+              <p className="text-lg" style={{ color: "oklch(0.50 0.03 250)" }}>
+                لقد أجبت على {score} من {questions.length} أسئلة بشكل صحيح
+              </p>
+
+              {/* Difficulty & Language */}
+              <div className="grid grid-cols-2 gap-4 mt-8 pt-8 border-t" style={{ borderColor: "oklch(0.85 0.05 250)" }}>
+                <div>
+                  <p className="text-sm" style={{ color: "oklch(0.50 0.03 250)" }}>مستوى الصعوبة</p>
+                  <p className="font-bold" style={{ color: "oklch(0.22 0.08 260)" }}>
+                    {difficulty === "easy" ? "سهل" : difficulty === "medium" ? "متوسط" : "صعب"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm" style={{ color: "oklch(0.50 0.03 250)" }}>اللغة</p>
+                  <p className="font-bold" style={{ color: "oklch(0.22 0.08 260)" }}>
+                    {language === "ar" ? "العربية" : "English"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Toggle Explanations */}
+            <div className="text-center mb-8">
+              <Button
+                onClick={() => setShowExplanations(!showExplanations)}
+                variant="outline"
+                className="rounded-xl"
+              >
+                {showExplanations ? "إخفاء الشروحات" : "عرض الشروحات"}
+              </Button>
+            </div>
+
+            {/* Questions Review */}
+            {showExplanations && (
+              <div className="space-y-6">
+                {questions.map((q, idx) => (
+                  <div key={idx} className="luxury-card rounded-2xl p-6">
+                    <div className="flex gap-3 mb-4">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold shrink-0"
+                        style={{
+                          background: answers[idx] === q.correctAnswer ? "oklch(0.55 0.18 65)" : "oklch(0.60 0.20 30)",
+                        }}
+                      >
+                        {idx + 1}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold mb-2" style={{ color: "oklch(0.22 0.08 260)" }}>
+                          {q.question}
+                        </p>
+                        <div className="space-y-2 text-sm">
+                          <p>
+                            <span style={{ color: "oklch(0.50 0.03 250)" }}>إجابتك: </span>
+                            <span style={{ color: answers[idx] === q.correctAnswer ? "oklch(0.55 0.18 65)" : "oklch(0.60 0.20 30)" }} className="font-bold">
+                              {answers[idx] || "لم تجب"}
+                            </span>
+                          </p>
+                          <p>
+                            <span style={{ color: "oklch(0.50 0.03 250)" }}>الإجابة الصحيحة: </span>
+                            <span style={{ color: "oklch(0.55 0.18 65)" }} className="font-bold">
+                              {q.correctAnswer}
+                            </span>
+                          </p>
+                          <p style={{ color: "oklch(0.50 0.03 250)" }} className="mt-3 italic">
+                            {q.explanation}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-4 mt-12 no-print">
+              <Button
+                onClick={handlePrint}
+                variant="outline"
+                className="flex-1 rounded-xl"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                طباعة
+              </Button>
+              <Button
+                onClick={handleReset}
+                className="flex-1 rounded-xl"
+                style={{ background: "oklch(0.72 0.15 75)", color: "white" }}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                اختبار جديد
+              </Button>
+            </div>
           </div>
         </main>
       </div>
