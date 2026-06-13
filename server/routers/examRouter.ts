@@ -175,8 +175,11 @@ export const examRouter = router({
       });
 
       try {
-        // Upload file to storage
-        const fileKey = `exam-files/${sessionId}-${Date.now()}-${fileName}`;
+        // Upload file to storage - sanitize filename to ASCII only
+        const sanitizedFileName = fileName
+          .replace(/[^a-zA-Z0-9.-]/g, "_")
+          .substring(0, 50);
+        const fileKey = `exam-files/${sessionId}-${Date.now()}-${sanitizedFileName}`;
         await storagePut(fileKey, buffer, mimeType);
 
         // Extract text
