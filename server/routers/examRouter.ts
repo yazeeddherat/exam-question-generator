@@ -125,8 +125,17 @@ Return the response as valid JSON (without any additional text) in this format:
   if (!rawContent) throw new Error("No response from AI");
   const content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
 
-  const parsed = JSON.parse(content) as { questions: GeneratedQuestion[] };
-  return parsed.questions.slice(0, count);
+  try {
+    const parsed = JSON.parse(content) as { questions: GeneratedQuestion[] };
+    if (!parsed.questions || !Array.isArray(parsed.questions)) {
+      throw new Error("Invalid response format: questions array not found");
+    }
+    return parsed.questions.slice(0, count);
+  } catch (parseError) {
+    console.error("[LLM Response]", content);
+    console.error("[Parse Error]", parseError);
+    throw new Error(`Failed to parse AI response: ${(parseError as Error).message}`);
+  }
 }
 
 export const examRouter = router({
