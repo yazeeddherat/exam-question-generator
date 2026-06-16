@@ -86,9 +86,11 @@ export async function extractTextFromBuffer(buffer: Buffer, fileType: SupportedF
 
     if (fileType === "pptx" || fileType === "ppt") {
       return await new Promise<string>((resolve, reject) => {
-        parseOffice(buffer, (data: string, err: unknown) => {
+        parseOffice(buffer, (data: unknown, err: unknown) => {
           if (err) return reject(new Error(String(err)));
-          resolve(data.trim());
+          // Handle case where data might not be a string
+          const text = typeof data === "string" ? data : String(data || "");
+          resolve(text.trim());
         }, { fileType: fileType === "pptx" ? "pptx" : "ppt" });
       });
     }

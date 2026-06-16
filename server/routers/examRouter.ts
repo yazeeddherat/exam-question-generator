@@ -123,7 +123,10 @@ Return the response as valid JSON (without any additional text) in this format:
 
   const rawContent = response.choices[0]?.message?.content;
   if (!rawContent) throw new Error("No response from AI");
-  const content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+  let content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+
+  // Sanitize content: remove control characters that might break JSON parsing
+  content = content.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F]/g, " ");
 
   try {
     const parsed = JSON.parse(content) as { questions: GeneratedQuestion[] };
