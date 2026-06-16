@@ -62,6 +62,7 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
         }
 
         const extractedText = text.join(" ").trim();
+        console.log("[PDF Extraction] Extracted text length:", extractedText.length, "chars");
         resolve(extractedText || "لم يتمكن النظام من استخراج النص من الملف.");
       });
 
@@ -91,9 +92,19 @@ export async function extractTextFromBuffer(buffer: Buffer, fileType: SupportedF
     if (fileType === "pptx" || fileType === "ppt") {
       return await new Promise<string>((resolve, reject) => {
         parseOffice(buffer, (data: unknown, err: unknown) => {
-          if (err) return reject(new Error(String(err)));
+          if (err) {
+            console.error("[PowerPoint Extraction] Error:", err);
+            // Fallback: try to extract text from buffer as UTF-8
+            const fallbackText = buffer.toString("utf-8").replace(/[^\x20-\x7E\u0600-\u06FF\n\r\t]/g, " ").trim();
+            if (fallbackText.length > 0) {
+              console.log("[PowerPoint Extraction] Using fallback extraction, length:", fallbackText.length);
+              return resolve(fallbackText);
+            }
+            return reject(new Error(String(err)));
+          }
           // Handle case where data might not be a string
           const text = typeof data === "string" ? data : String(data || "");
+          console.log("[PowerPoint Extraction] Extracted text length:", text.trim().length);
           resolve(text.trim());
         }, { fileType: fileType === "pptx" ? "pptx" : "ppt" });
       });
