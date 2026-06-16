@@ -164,8 +164,9 @@ export const examRouter = router({
       }
 
       // Decode base64 to buffer
-      // Note: base64 encoding increases size by ~33%, so we need to account for that
-      const buffer = Buffer.from(fileBase64, "base64");
+      // Handle DataURL format (data:application/pdf;base64,xxx) by extracting the base64 part
+      const b64 = fileBase64.includes(',') ? fileBase64.split(',')[1] : fileBase64;
+      const buffer = Buffer.from(b64, "base64");
 
       // Check file size (max 1GB)
       if (buffer.length > 1024 * 1024 * 1024) {

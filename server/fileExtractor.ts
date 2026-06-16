@@ -7,7 +7,7 @@ const { parseOffice } = require("officeparser") as { parseOffice: (input: Buffer
 
 export type SupportedFileType = "pdf" | "docx" | "doc" | "pptx" | "ppt" | "txt";
 
-export function detectFileType(filename: string, mimetype: string): SupportedFileType {
+export function detectFileType(filename: string, mimetype: string): SupportedFileType | null {
   const ext = filename.toLowerCase().split(".").pop() || "";
   
   // محاولة اكتشاف من MIME type أولاً
@@ -26,8 +26,8 @@ export function detectFileType(filename: string, mimetype: string): SupportedFil
   if (ext === "ppt") return "ppt";
   if (ext === "txt") return "txt";
   
-  // افتراض PDF كنوع افتراضي لأي ملف آخر
-  return "pdf";
+  // إرجاع null للأنواع غير المدعومة
+  return null;
 }
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
@@ -104,6 +104,8 @@ export function sanitizeText(text: string): string {
   return text
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
+    // Remove control characters except newlines and tabs
+    .replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F]/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
