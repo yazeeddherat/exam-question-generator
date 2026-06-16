@@ -32,37 +32,41 @@ export function detectFileType(filename: string, mimetype: string): SupportedFil
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   try {
-    // محاولة استخراج النص من PDF باستخدام طريقة بسيطة
-    // البحث عن النصوص المرئية في ملف PDF
-    const text = buffer.toString("binary");
-    
-    // استخراج النصوص من PDF
-    const matches = text.match(/BT[\s\S]*?ET/g) || [];
-    let extractedText = "";
-    
-    for (const match of matches) {
-      const textMatches = match.match(/\((.*?)\)/g) || [];
-      for (const textMatch of textMatches) {
-        const cleanText = textMatch.slice(1, -1).replace(/\\/g, "");
-        extractedText += cleanText + " ";
-      }
-    }
-    
-    // إذا لم نجد نصاً، حاول طريقة أخرى
-    if (!extractedText.trim()) {
-      // استخراج أي نصوص مرئية من الملف
-      const lines = text.split("\n");
-      for (const line of lines) {
-        if (line.includes("(") && line.includes(")")) {
-          const match = line.match(/\((.*?)\)/);
-          if (match) {
-            extractedText += match[1] + " ";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const PDFParser = require("pdf2json") as any;
+    const parser = new PDFParser(null, 1);
+
+    return await new Promise<string>((resolve, reject) => {
+      parser.on("pdfParser_dataError", (error: unknown) => {
+        reject(new Error(`PDF parsing error: ${error}`));
+      });
+
+      parser.on("pdfParser_dataReady", () => {
+        const text: string[] = [];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (parser.data && parser.data.Pages) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const page of parser.data.Pages) {
+            if (page.Texts) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              for (const textObj of page.Texts) {
+                if (textObj.R && textObj.R[0] && textObj.R[0].T) {
+                  // Decode the text
+                  const decoded = decodeURIComponent(textObj.R[0].T);
+                  text.push(decoded);
+                }
+              }
+            }
           }
         }
-      }
-    }
-    
-    return extractedText.trim() || "لم يتمكن النظام من استخراج النص من الملف. يرجى التأكد من أن الملف يحتوي على نصوص قابلة للاستخراج.";
+
+        const extractedText = text.join(" ").trim();
+        resolve(extractedText || "لم يتمكن النظام من استخراج النص من الملف.");
+      });
+
+      parser.parseBuffer(buffer);
+    });
   } catch (error) {
     console.error("[FileExtractor] PDF extraction error:", error);
     throw new Error(`Failed to extract text from PDF: ${(error as Error).message}`);

@@ -200,7 +200,7 @@ export const examRouter = router({
         const rawText = await extractTextFromBuffer(buffer, fileType);
         const cleanText = sanitizeText(rawText);
 
-        if (cleanText.length < 100) {
+        if (cleanText.length < 50) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "لم يتم العثور على نص كافٍ في الملف لتوليد الأسئلة.",
